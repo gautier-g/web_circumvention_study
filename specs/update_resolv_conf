@@ -1,0 +1,37 @@
+#!/bin/bash
+# Custom resolv.conf update script for OpenVPN
+# This script ensures that the VPN DNS is given priority over other nameservers.
+
+set -e
+
+IFACE=$dev
+RESOLV_CONF="/etc/resolv.conf"
+BACKUP_CONF="/etc/resolv.conf.bak"
+
+case "$script_type" in
+  up)
+    sudo cp "$RESOLV_CONF" "$BACKUP_CONF"
+
+    DNS_SERVERS=()
+
+    for option in ${!foreign_option_*}; do
+      eval value="\${$option}"
+      if [[ $value =~ ^dhcp-option\ DNS\ ([0-9.]+) ]]; then
+        DNS_SERVERS+=("${BASH_REMATCH[1]}")
+      fi
+    done
+
+    sudo truncate -s 0 "$RESOLV_CONF"
+
+    for dns in "${DNS_SERVERS[@]}"; do
+      echo "nameserver $dns" | sudo tee -a "$RESOLV_CONF"
+    done
+
+    if ! grep -q "nameserver 192.168.1.1" "$RESOLV_CONF"; then
+      echo "nameserver 192.168.1.1" | sudo tee -a "$RESOLV_CONF"
+    fi
+    ;;
+  down)
+    sudo cp "$BACKUP_CONF" "$RESOLV_CONF"
+    ;;
+esac
